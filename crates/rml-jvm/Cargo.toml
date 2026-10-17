@@ -1,0 +1,10 @@
+[package]
+name = "rml-jvm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rml-runtime = { path = "../rml-runtime" }
+jni = "0.21"
+libc = "0.2"
+thiserror = "1"

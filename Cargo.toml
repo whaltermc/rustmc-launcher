@@ -4,6 +4,8 @@ members = [
     "crates/rml-core",
     "crates/rml-auth",
     "crates/rml-version",
+    "crates/rml-runtime",
+    "crates/rml-jvm",
     "crates/rml-launch",
     "crates/rml-app",
     "crates/rml-android",

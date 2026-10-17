@@ -2,6 +2,7 @@ use jni::objects::{JClass, JString};
 use jni::sys::jstring;
 use jni::JNIEnv;
 use rml_auth::{Account, AccountKind, MicrosoftAuth, PollOutcome};
+use rml_runtime::RuntimeSpec;
 use std::sync::{Mutex, OnceLock};
 
 #[derive(Clone)]
@@ -22,6 +23,41 @@ fn set_login(state: LoginState) {
     if let Ok(mut g) = login().lock() {
         *g = state;
     }
+}
+
+#[derive(Clone)]
+struct InstallState {
+    state: &'static str,
+    label: String,
+    done: u64,
+    total: u64,
+    message: String,
+}
+
+static INSTALL: OnceLock<Mutex<InstallState>> = OnceLock::new();
+
+fn install_state() -> &'static Mutex<InstallState> {
+    INSTALL.get_or_init(|| {
+        Mutex::new(InstallState {
+            state: "idle",
+            label: String::new(),
+            done: 0,
+            total: 0,
+            message: String::new(),
+        })
+    })
+}
+
+#[derive(Clone)]
+enum JvmState {
+    Idle,
+    Running(String),
+}
+
+static JVM: OnceLock<Mutex<JvmState>> = OnceLock::new();
+
+fn jvm_state() -> &'static Mutex<JvmState> {
+    JVM.get_or_init(|| Mutex::new(JvmState::Idle))
 }
 
 fn jstring(env: &mut JNIEnv, s: &str) -> jstring {
@@ -164,5 +200,142 @@ pub extern "system" fn Java_dev_rustmc_launcher_MainActivity_nativeLoginState(
         LoginState::Ok(u) => format!("ok: {u}"),
         LoginState::Err(e) => format!("error: {e}"),
     };
+    jstring(&mut env, &s)
+}
+
+fn runtime_status_json() -> String {
+    let views: Vec<serde_json::Value> = rml_runtime::installed()
+        .into_iter()
+        .map(|r| {
+            serde_json::json!({
+                "name": r.name,
+                "major": r.major,
+                "javaVersion": r.java_version,
+                "installed": r.is_complete(),
+            })
+        })
+        .collect();
+    serde_json::Value::Array(views).to_string()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_rustmc_launcher_MainActivity_nativeRuntimeStatus(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let json = runtime_status_json();
+    jstring(&mut env, &json)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_rustmc_launcher_MainActivity_nativeRuntimeInstall(
+    mut env: JNIEnv,
+    _class: JClass,
+    name: JString,
+) -> jstring {
+    let name: String = match env.get_string(&name) {
+        Ok(s) => s.into(),
+        Err(_) => return jstring(&mut env, "error: bad runtime name"),
+    };
+    let Some(spec): Option<&'static RuntimeSpec> = rml_runtime::spec(&name) else {
+        return jstring(&mut env, &format!("error: unknown runtime '{name}'"));
+    };
+    if let Ok(mut g) = install_state().lock() {
+        if g.state == "running" {
+            return jstring(&mut env, "error: another install is running");
+        }
+        *g = InstallState {
+            state: "running",
+            label: "starting".into(),
+            done: 0,
+            total: 0,
+            message: String::new(),
+        };
+    }
+    std::thread::spawn(move || {
+        let progress = |done: u64, total: u64, label: &str| {
+            if let Ok(mut g) = install_state().lock() {
+                g.state = "running";
+                g.label = label.to_string();
+                g.done = done;
+                g.total = total;
+            }
+        };
+        let result = rml_runtime::install(spec, &progress);
+        if let Ok(mut g) = install_state().lock() {
+            match result {
+                Ok(dir) => {
+                    g.state = "done";
+                    g.label = "done".into();
+                    g.message = dir.display().to_string();
+                }
+                Err(e) => {
+                    g.state = "error";
+                    g.message = format!("{e}");
+                }
+            }
+        }
+    });
+    jstring(&mut env, "started")
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_rustmc_launcher_MainActivity_nativeRuntimeProgress(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let s = install_state()
+        .lock()
+        .map(|g| {
+            format!(
+                "{}:{}:{}:{}:{}",
+                g.state, g.label, g.done, g.total, g.message
+            )
+        })
+        .unwrap_or_else(|_| "error:lock:0:0:".to_string());
+    jstring(&mut env, &s)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_rustmc_launcher_MainActivity_nativeJvmProbe(
+    mut env: JNIEnv,
+    _class: JClass,
+    name: JString,
+) -> jstring {
+    let name: String = match env.get_string(&name) {
+        Ok(s) => s.into(),
+        Err(_) => return jstring(&mut env, "error: bad runtime name"),
+    };
+    if let Ok(mut g) = jvm_state().lock() {
+        match &*g {
+            JvmState::Running(_) => return jstring(&mut env, "error: jvm probe already running"),
+            _ => *g = JvmState::Running(name.clone()),
+        }
+    }
+    std::thread::spawn(move || {
+        let result = rml_jvm::probe(&name);
+        if let Ok(mut g) = jvm_state().lock() {
+            *g = match result {
+                Ok(Some(v)) => JvmState::Running(format!("ok: {v}")),
+                Ok(None) => JvmState::Running("ok: (no java.version)".into()),
+                Err(e) => JvmState::Running(format!("error: {e}")),
+            };
+        }
+    });
+    jstring(&mut env, "started")
+}
+
+#[no_mangle]
+pub extern "system" fn Java_dev_rustmc_launcher_MainActivity_nativeJvmProbeState(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let s = jvm_state()
+        .lock()
+        .map(|g| match &*g {
+            JvmState::Idle => "idle".to_string(),
+            JvmState::Running(v) => v.clone(),
+        })
+        .unwrap_or_else(|_| "error:lock".to_string());
     jstring(&mut env, &s)
 }

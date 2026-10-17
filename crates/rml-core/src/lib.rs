@@ -10,4 +10,12 @@ pub mod dirs {
                     .join(".rustmc-launcher")
             })
     }
+
+    pub fn cache_dir() -> PathBuf {
+        data_dir().join("cache")
+    }
+
+    pub fn runtimes_dir() -> PathBuf {
+        data_dir().join("runtimes")
+    }
 }
