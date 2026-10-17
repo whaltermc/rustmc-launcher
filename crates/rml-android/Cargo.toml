@@ -8,4 +8,9 @@ crate-type = ["cdylib"]
 name = "rml_ui"
 
 [dependencies]
+rml-core = { path = "../rml-core" }
+rml-auth = { path = "../rml-auth" }
+rml-version = { path = "../rml-version" }
 jni = "0.21"
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "time"] }
