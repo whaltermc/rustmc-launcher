@@ -20,12 +20,11 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install platform, build-tools and NDK
         run: |
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.0.12077973"
+          SDKMANAGER="$(command -v sdkmanager || ls "$ANDROID_SDK_ROOT"/cmdline-tools/*/bin/sdkmanager | head -1)"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.0.12077973"
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.0.12077973" >> "$GITHUB_ENV"
           echo "$ANDROID_SDK_ROOT/build-tools/35.0.0" >> "$GITHUB_PATH"
 
@@ -39,6 +38,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: RustMC-Launcher-debug
+          name: RustMC-Launcher-apk
           path: RustMC-Launcher.apk
-          if-no-files-found: error
