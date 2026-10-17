@@ -16,6 +16,8 @@ pub enum RuntimeError {
     Http(#[from] reqwest::Error),
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
+    #[error("xz: {0}")]
+    Xz(#[from] lzma_rs::error::Error),
     #[error("unknown runtime '{0}'")]
     UnknownRuntime(String),
     #[error("version bundle missing component '{0}'")]
@@ -156,8 +158,8 @@ pub fn install_from_version(
     download(&format!("{base}universal.tar.xz"), &universal, "java-runtime", progress)?;
     download(&format!("{base}{platform}"), &platform_file, "java-platform", progress)?;
 
-    unpack_tar_xz_over(&universal, &dir)?;
-    unpack_tar_xz_over(&platform_file, &dir)?;
+    unpack_tar_xz_over(&universal, &dir, "universal")?;
+    unpack_tar_xz_over(&platform_file, &dir, "platform")?;
     fix_permissions(&dir)?;
     std::fs::write(dir.join(".rml-version"), version_text)?;
     let _ = std::fs::remove_file(&universal);
@@ -165,12 +167,28 @@ pub fn install_from_version(
     Ok(dir)
 }
 
-/// Stream-decompress `archive_path` and unpack every entry into `dest`, replacing files.
-fn unpack_tar_xz_over(archive_path: &std::path::Path, dest: &std::path::Path) -> Result<(), RuntimeError> {
+/// Decompress `archive_path` (xz) and unpack every entry into `dest`, replacing files.
+///
+/// Uses a pure-Rust xz decoder so the resulting `.so` has no dependency on a system
+/// `liblzma`, which Android's app sandbox does not provide.
+fn unpack_tar_xz_over(
+    archive_path: &std::path::Path,
+    dest: &std::path::Path,
+    tag: &str,
+) -> Result<(), RuntimeError> {
+    use std::io::Write;
     std::fs::create_dir_all(dest)?;
-    let file = std::fs::File::open(archive_path)?;
-    let decoder = xz2::read::XzDecoder::new(file);
-    let mut archive = tar::Archive::new(decoder);
+    let cache = cache_dir();
+    std::fs::create_dir_all(&cache)?;
+    let tar_path = cache.join(format!("{}-{}.tar", std::process::id(), tag));
+    {
+        let mut input = std::io::BufReader::new(std::fs::File::open(archive_path)?);
+        let mut output = std::io::BufWriter::new(std::fs::File::create(&tar_path)?);
+        lzma_rs::xz_decompress(&mut input, &mut output)?;
+        output.flush()?;
+    }
+    let file = std::fs::File::open(&tar_path)?;
+    let mut archive = tar::Archive::new(file);
     for entry in archive.entries()? {
         let mut entry = entry?;
         let path = entry.path()?.into_owned();
@@ -194,6 +212,7 @@ fn unpack_tar_xz_over(archive_path: &std::path::Path, dest: &std::path::Path) ->
         }
         entry.unpack(&out)?;
     }
+    let _ = std::fs::remove_file(&tar_path);
     Ok(())
 }
 

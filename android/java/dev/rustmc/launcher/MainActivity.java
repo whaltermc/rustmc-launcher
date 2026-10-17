@@ -18,6 +18,7 @@ public class MainActivity extends Activity {
         System.loadLibrary("rml_ui");
     }
 
+    private native String nativeSetDataDir(String path);
     private native String nativeInfo();
     private native String nativeAccounts();
     private native String nativeAddOffline(String name);
@@ -39,6 +40,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        nativeSetDataDir(getFilesDir().getAbsolutePath());
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);

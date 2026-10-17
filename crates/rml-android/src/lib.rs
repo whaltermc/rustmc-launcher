@@ -84,6 +84,24 @@ fn accounts_json() -> String {
     serde_json::Value::Array(views).to_string()
 }
 
+/// Hand the app's private files directory to the Rust side, since Rust has no reliable way
+/// to discover it (no `HOME`, no `getFilesDir()`), and the default fallback is unwritable.
+#[no_mangle]
+pub extern "system" fn Java_dev_rustmc_launcher_MainActivity_nativeSetDataDir(
+    mut env: JNIEnv,
+    _class: JClass,
+    path: JString,
+) -> jstring {
+    match env.get_string(&path) {
+        Ok(p) => {
+            let p: String = p.into();
+            std::env::set_var("RML_DATA_DIR", &p);
+            jstring(&mut env, &p)
+        }
+        Err(_) => jstring(&mut env, "error: bad path"),
+    }
+}
+
 #[no_mangle]
 pub extern "system" fn Java_dev_rustmc_launcher_MainActivity_nativeInfo(
     mut env: JNIEnv,
