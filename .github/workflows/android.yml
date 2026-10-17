@@ -30,7 +30,11 @@ jobs:
 
       - name: Build APK
         run: |
-          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
+          TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLCHAIN/bin/aarch64-linux-android24-clang"
+          export CC_aarch64_linux_android="$TOOLCHAIN/bin/aarch64-linux-android24-clang"
+          export CXX_aarch64_linux_android="$TOOLCHAIN/bin/aarch64-linux-android24-clang++"
+          export AR_aarch64_linux_android="$TOOLCHAIN/bin/llvm-ar"
           export ANDROID_JAR="$ANDROID_SDK_ROOT/platforms/android-35/android.jar"
           export CARGO_TARGET=aarch64-linux-android
           bash ./build-apk.sh
