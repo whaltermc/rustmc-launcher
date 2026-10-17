@@ -33,7 +33,7 @@ jobs:
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
           export ANDROID_JAR="$ANDROID_SDK_ROOT/platforms/android-35/android.jar"
           export CARGO_TARGET=aarch64-linux-android
-          ./build-apk.sh
+          bash ./build-apk.sh
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
