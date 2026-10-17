@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/rml-core",
+    "crates/rml-auth",
+    "crates/rml-version",
+    "crates/rml-launch",
+    "crates/rml-ui",
+    "crates/rml-app",
+]
