@@ -7,4 +7,5 @@ members = [
     "crates/rml-launch",
     "crates/rml-ui",
     "crates/rml-app",
+    "crates/rml-android",
 ]
